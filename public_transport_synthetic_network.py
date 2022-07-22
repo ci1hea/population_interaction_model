@@ -22,12 +22,13 @@ import matplotlib.gridspec as gridspec
 #my scripts
 import attractivity_modelling
 import fractal_working
+import theta_function
 
 
 #Pickling functions
 def save_obj(obj, name ):
     with open('resources/' + name + '.pkl', 'wb') as f:
-        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+        pickle.dump(obj, f) #pickle.HIGHEST_PROTOCOL)
 #save_obj(lsoa_dist, "lsoa_data")
 def load_obj(name ):
     with open('resources/' + name + '.pkl', 'rb') as f:
@@ -184,9 +185,24 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, is_shuffle
     #fractal dimension
     Df = fractal_dimension(centroids)
 
+
+    ## need the length of the commute matrix
+    commute = pd.read_csv("resources/SCR_Commute_msoa_to_msoa.csv")
+    comm_matrix = (
+        commute
+        .pivot_table(index="O_Code", columns="D_Code")#, values="Commuters", aggfunc=len)
+        .fillna(0)
+        .astype(int)
+    )
+    commute_matrix = comm_matrix.to_numpy()
+    commute_matrix[np.diag_indices_from(commute_matrix)] = 0
+
+
     #create data structures
     UrbanY = []
-    edges = np.zeros((len(sheff_shape), len(sheff_shape), n))
+    edges = np.zeros((len(commute_matrix), len(commute_matrix), n))
+
+    theta = 0.18 #number given by one of the optimise_for_theta runs 
 
     for i in range(n):
 
@@ -195,7 +211,7 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, is_shuffle
         attractivity1, attractivity2, alpha, xmin = sample_attractivities(edu_ratios, income_params, 1)
         #alpha = 1.45653 #mean fixed alpha from 1000 runs
 
-        theta = np.exp(np.log(xmin**2) - (base_m*np.log(eps)))
+        # theta = np.exp(np.log(xmin**2) - (base_m*np.log(eps)))
         dc = base_m * (alpha - 1)
 
 
@@ -229,7 +245,10 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, is_shuffle
         adjacency = np.zeros_like(connectivity)
         adjacency[np.where(connectivity>theta)] = 1
         adjacency = np.multiply(adjacency, pop) #population amplification factor
-        edges[:,:,i] = adjacency
+
+        adjacency_msoa = theta_function.convert_to_msoa(adjacency)
+
+        edges[:,:,i] = adjacency_msoa
 
 
         if Df <= dc:
@@ -239,10 +258,10 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, is_shuffle
 
         #activity
         # paths_matrix_n = (paths_matrix - paths_matrix.min()) / (paths_matrix.max() - paths_matrix.min()) +1
-        activity = np.power(paths_matrix, eta)
-        activity[np.where(np.isinf(activity))[0], np.where(np.isinf(activity))[1]] = 0
+        activity_lsoa = np.power(paths_matrix, eta)
+        activity_msoa = theta_function.convert_to_msoa(activity_lsoa)
 
-        UrbanY.append( 0.5 * np.sum(np.multiply(adjacency, activity)) )
+        UrbanY.append( 0.5 * np.sum(np.multiply(adjacency_msoa, activity_msoa)) )
         # UrbanY.append( 0.5 * np.sum(adjacency))
 
 
@@ -258,6 +277,7 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, is_shuffle
     time_log.append(endt-startt)
     total_time = sum(time_log)
     print("Total run time is: " + str(total_time))
+
     return UrbanY, edge_freq, edge_width
 
 
@@ -280,7 +300,7 @@ if __name__ == '__main__':
     # np.random.shuffle(m_paths) #shuffled bus service
     comp_ratio = np.load("resources/newdata_companyhouse.npy") #m values for from buses
     n = 1000 #number of monte carlo repeats
-    # ms = [1]
+    ms = [1]
 
     # -----------------------------------------
     # Normal paths
@@ -295,11 +315,11 @@ if __name__ == '__main__':
     paths_matrix = load_obj("newdata_ave_paths")
     args_normal = []
 
-    # for i in range(len(ms)):
-    args_normal.append((m_paths, n, lsoa_data, paths_matrix, comp_ratio))
+    for i in range(len(ms)):
+        args_normal.append((m_paths,n, lsoa_data, paths_matrix, comp_ratio))
 
     with multiprocessing.Pool(processes=no_scripts) as pool:
-        output = pool.starmap(monte_carlo_runs, args_normal)
+        output = pool.starmap(monte_carlo_runs, args_normal) #monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio)
 
     UrbanYs, edge_freqs, edge_widths = [], [], []
     for i in range(len(output)):
@@ -313,6 +333,8 @@ if __name__ == '__main__':
         "edge_widths": edge_widths
         }
 
-    save_obj(normal, "normal_layout_"+str(n)+"run_bus")
+    save_obj(normal, "normal_layout_"+str(n)+"run_bus_given_theta")
 
     print(time.time()-t1)
+
+## python public_transport_synthetic_network.py
