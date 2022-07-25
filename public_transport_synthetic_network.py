@@ -129,9 +129,36 @@ def paths_shuffle(shape, income_params):
     return means
 
 
+#Bus adjacency
+def bus_adjacency(stoproute,lsoa_list,route_freqs):
+    # Create matrix that combines location data and route frequencies
+    combine = pd.merge(stoproute,route_freqs,on='1')
+    combine = combine.drop_duplicates(['1','naptan_sto'])
+    combine = combine.rename(columns={'geo_code':'lsoa11cd'})
+
+    # Create adjacency matrix LSOA x route
+    bstopfreq = combine[['lsoa11cd','naptan_sto','1','average']]
+    adj = pd.pivot(bstopfreq,index=["lsoa11cd","naptan_sto"], columns="1", values="average").fillna(0)
+    adj = adj.astype(float)
+    adj = adj.groupby(level="lsoa11cd").mean()
+    bus2route = pd.merge(lsoa_list, adj, how='left',on='lsoa11cd').set_index('lsoa11cd')
+
+    #Adjacency matrix LSOA x LSOA
+    bus2route = np.array(bus2route)
+    bus2routeT = bus2route.transpose()
+    lsoa2lsoa = np.dot(bus2route,bus2routeT)**0.5
+    lsoa2lsoa[np.diag_indices_from(lsoa2lsoa)] = 0
+
+    lsoa2lsoa = pd.DataFrame(lsoa2lsoa)
+
+    #m values created
+    m_paths = lsoa2lsoa.copy()
+    m_paths[m_bus>0]=np.log10(m_bus[m_bus>0])
+    m_paths=1-(m_bus/np.max(np.max(m_bus)))
+    return m_paths
 
 #Monte Carlo function---------------------------------------------------------
-def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, is_shuffled=None):
+def monte_carlo_runs( n, lsoa_data, paths_matrix, comp_ratio, is_shuffled=None):
     """
 
     Parameters
@@ -170,6 +197,12 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, is_shuffle
     #dummy distances
     euclidean_dists, centroids, centroid_paths_matrix, med_paths = euclidean_dists_fun(sheff_shape)
     eps = 1200 #med_paths 1200 is the median diameter of the lsoa polygons
+
+    #Creating m
+    stoproute = pd.read_csv('stoproute_withareacodes.csv')
+    lsoa_list = pd.read_csv("E47000002_KS101EW.csv")['lsoa11cd']
+    route_freqs = pd.read_excel('Bus_routes_frequency final.xlsx','raw data',usecols= ["1","average"]).astype(str)
+    m_paths = bus_adjacency(stoproute,lsoa_list,route_freqs)
 
 
     if is_shuffled is None:
