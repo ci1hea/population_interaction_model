@@ -159,7 +159,7 @@ def bus_adjacency(stoproute,lsoa_list,route_freqs):
     return m_paths
 
 #Monte Carlo function---------------------------------------------------------
-def monte_carlo_runs( n, lsoa_data, paths_matrix, comp_ratio, is_shuffled=None):
+def monte_carlo_runs(n, lsoa_data, paths_matrix, comp_ratio, msoa_on=False, is_shuffled=None):
     """
 
     Parameters
@@ -172,6 +172,8 @@ def monte_carlo_runs( n, lsoa_data, paths_matrix, comp_ratio, is_shuffled=None):
         DESCRIPTION.
     paths_matrix : TYPE
         DESCRIPTION.
+    msoa_on : TYPE, optional
+        flag for aggregation to msoas. The default is False.
     is_shuffled : TYPE, optional
         DESCRIPTION. The default is None.
 
@@ -235,7 +237,7 @@ def monte_carlo_runs( n, lsoa_data, paths_matrix, comp_ratio, is_shuffled=None):
     UrbanY = []
     edges = np.zeros((len(commute_matrix), len(commute_matrix), n))
 
-    theta = 0.18 #number given by one of the optimise_for_theta runs 
+    theta = 0.18 #number given by one of the optimise_for_theta runs
 
     for i in range(n):
 
@@ -279,10 +281,6 @@ def monte_carlo_runs( n, lsoa_data, paths_matrix, comp_ratio, is_shuffled=None):
         adjacency[np.where(connectivity>theta)] = 1
         adjacency = np.multiply(adjacency, pop) #population amplification factor
 
-        adjacency_msoa = theta_function.convert_to_msoa(adjacency)
-
-        edges[:,:,i] = adjacency_msoa
-
 
         if Df <= dc:
             eta = ((-5/6) * Df) + dc
@@ -292,12 +290,16 @@ def monte_carlo_runs( n, lsoa_data, paths_matrix, comp_ratio, is_shuffled=None):
         #activity
         # paths_matrix_n = (paths_matrix - paths_matrix.min()) / (paths_matrix.max() - paths_matrix.min()) +1
         activity_lsoa = np.power(paths_matrix, eta)
-        activity_msoa = theta_function.convert_to_msoa(activity_lsoa)
-
-        UrbanY.append( 0.5 * np.sum(np.multiply(adjacency_msoa, activity_msoa)) )
+        if msoa_on is True:
+            adjacency_msoa = theta_function.convert_to_msoa(adjacency)
+            edges[:,:,i] = adjacency_msoa
+            activity_msoa = theta_function.convert_to_msoa(activity_lsoa)
+            UrbanY.append( 0.5 * np.sum(np.multiply(adjacency_msoa, activity_msoa)) )
+        else:
+            edges[:,:,i] = adjacency
+            activity_lsoa = np.power(paths_matrix, eta)
+            UrbanY.append( 0.5 * np.sum(np.multiply(adjacency, activity_lsoa)) )
         # UrbanY.append( 0.5 * np.sum(adjacency))
-
-
 
     #Creating network data
     edge_freq = np.count_nonzero(edges, axis = 2) / n
