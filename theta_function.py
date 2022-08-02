@@ -35,6 +35,7 @@ def convert_to_msoa(data):
 def loop_theta(connectivity, pop, commute_matrix, low_bound, high_bound, step):
     prod_max = 0
     theta = np.arange(low_bound, high_bound, step)
+    prod_F = np.zeros(len(theta))
 
     #normalising the commuter data/row
     commute_matrix_norm = commute_matrix/commute_matrix.sum(axis=1)[:,None]
@@ -58,13 +59,13 @@ def loop_theta(connectivity, pop, commute_matrix, low_bound, high_bound, step):
          A[np.isnan(A)] = 0
 
          #Frobenius product
-         prod_F = np.sum(np.multiply(A, commute_matrix_norm))
+         prod_F[i] = np.sum(np.multiply(A, commute_matrix_norm))
 
-         if prod_F > prod_max:
-             prod_max = prod_F
+         if prod_F[i] > prod_max:
+             prod_max = prod_F[i]
              A_sim_norm = A
              A_sim = adjacency_msoa
              theta_fin = theta[i]
 
 
-    return theta_fin, A_sim
+    return theta_fin, theta, prod_F, A_sim

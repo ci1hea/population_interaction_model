@@ -199,7 +199,7 @@ def opt_theta_funct(m_paths, lsoa_data, paths_matrix, comp_ratio, commute_matrix
     high_bound = 2
     step = 0.001
 
-    theta_opt, adjacency = theta_function.loop_theta(connectivity, pop, commute_matrix, low_bound, high_bound, step)
+    theta_opt, thetas, prod_Fs, adjacency = theta_function.loop_theta(connectivity, pop, commute_matrix, low_bound, high_bound, step)
 
     #edges[:,:] = adjacency  #not sure what to do with this just removed the i from the intial loop
 
@@ -233,7 +233,7 @@ def opt_theta_funct(m_paths, lsoa_data, paths_matrix, comp_ratio, commute_matrix
     print("Total run time is: " + str(total_time))
 
 
-    return UrbanY, theta_opt, adjacency
+    return UrbanY, theta_opt, thetas, prod_Fs, adjacency
 
 
 #Running Monte Carlo ----------------------------------------
@@ -289,7 +289,7 @@ if __name__ == '__main__':   #- no need to put in multiprocessing
     # with multiprocessing.Pool(processes=no_scripts) as pool:
         # output = pool.starmap(monte_carlo_runs, args_normal)
 
-    UrbanY, theta_opt, adjacency = opt_theta_funct(m_paths, lsoa_data, paths_matrix, comp_ratio, commute_matrix)
+    UrbanY, theta_opt, thetas, prod_Fs, adjacency = opt_theta_funct(m_paths, lsoa_data, paths_matrix, comp_ratio, commute_matrix)
 # for i in range(len(output)):
 #     UrbanYs.append(output[i][0])
 #     edge_freqs.append(output[i][1])
@@ -298,6 +298,8 @@ if __name__ == '__main__':   #- no need to put in multiprocessing
     normal = {
         "UrbanY": UrbanY,
         "theta_opt": theta_opt,
+        "theta_all": thetas,
+        "prod_F_all": prod_Fs,
         "adjacency": adjacency
         }
 

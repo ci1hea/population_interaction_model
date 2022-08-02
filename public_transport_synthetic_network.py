@@ -133,13 +133,13 @@ def paths_shuffle(shape, income_params):
 #Bus adjacency
 def bus_adjacency(stoproute,lsoa_list,route_freqs):
     # Create matrix that combines location data and route frequencies
-    combine = pd.merge(stoproute,route_freqs,on='1')
-    combine = combine.drop_duplicates(['1','naptan_sto'])
+    combine = pd.merge(stoproute, route_freqs, on='line')
+    combine = combine.drop_duplicates(['line', 'naptan_sto'])
     combine = combine.rename(columns={'geo_code':'lsoa11cd'})
 
     # Create adjacency matrix LSOA x route
-    bstopfreq = combine[['lsoa11cd','naptan_sto','1','average']]
-    adj = pd.pivot(bstopfreq,index=["lsoa11cd","naptan_sto"], columns="1", values="average").fillna(0)
+    bstopfreq = combine[['lsoa11cd', 'naptan_sto', 'line', 'average']]
+    adj = pd.pivot(bstopfreq,index=["lsoa11cd", "naptan_sto"], columns="line", values="average").fillna(0)
     adj = adj.astype(float)
     adj = adj.groupby(level="lsoa11cd").mean()
     bus2route = pd.merge(lsoa_list, adj, how='left',on='lsoa11cd').set_index('lsoa11cd')
@@ -147,19 +147,20 @@ def bus_adjacency(stoproute,lsoa_list,route_freqs):
     #Adjacency matrix LSOA x LSOA
     bus2route = np.array(bus2route)
     bus2routeT = bus2route.transpose()
-    lsoa2lsoa = np.dot(bus2route,bus2routeT)**0.5
+    lsoa2lsoa = np.dot(bus2route,bus2routeT)**0.5 #check that this actually does whay I think it does
     lsoa2lsoa[np.diag_indices_from(lsoa2lsoa)] = 0
 
     lsoa2lsoa = pd.DataFrame(lsoa2lsoa)
+    lsoa2lsoa = lsoa2lsoa.fillna(0)
 
     #m values created
-    m_paths = lsoa2lsoa.copy()
-    m_paths[m_bus>0]=np.log10(m_bus[m_bus>0])
-    m_paths=1-(m_bus/np.max(np.max(m_bus)))
-    return m_paths
+    m_bus = lsoa2lsoa.copy()
+    m_bus[m_bus>0]=np.log10(m_bus[m_bus>0])
+    m_bus=1-(m_bus/np.max(np.max(m_bus)))
+    return m_bus.values
 
 #Monte Carlo function---------------------------------------------------------
-def monte_carlo_runs(n, lsoa_data, paths_matrix, comp_ratio, msoa_on=False, is_shuffled=None):
+def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, msoa_on=False, is_shuffled=None):
     """
 
     Parameters
@@ -201,12 +202,6 @@ def monte_carlo_runs(n, lsoa_data, paths_matrix, comp_ratio, msoa_on=False, is_s
     euclidean_dists, centroids, centroid_paths_matrix, med_paths = euclidean_dists_fun(sheff_shape)
     eps = 1200 #med_paths 1200 is the median diameter of the lsoa polygons
 
-    #Creating m
-    stoproute = pd.read_csv('stoproute_withareacodes.csv')
-    lsoa_list = pd.read_csv("E47000002_KS101EW.csv")['lsoa11cd']
-    route_freqs = pd.read_excel('Bus_routes_frequency final.xlsx','raw data',usecols= ["1","average"]).astype(str)
-    m_paths = bus_adjacency(stoproute,lsoa_list,route_freqs)
-
 
     if is_shuffled is None:
         pass
@@ -222,20 +217,22 @@ def monte_carlo_runs(n, lsoa_data, paths_matrix, comp_ratio, msoa_on=False, is_s
 
 
     ## need the length of the commute matrix
-    commute = pd.read_csv("resources/SCR_Commute_msoa_to_msoa.csv")
-    comm_matrix = (
-        commute
-        .pivot_table(index="O_Code", columns="D_Code")#, values="Commuters", aggfunc=len)
-        .fillna(0)
-        .astype(int)
-    )
-    commute_matrix = comm_matrix.to_numpy()
-    commute_matrix[np.diag_indices_from(commute_matrix)] = 0
-
-
     #create data structures
     UrbanY = []
-    edges = np.zeros((len(commute_matrix), len(commute_matrix), n))
+    if msoa_on is True:
+        commute = pd.read_csv("resources/SCR_Commute_msoa_to_msoa.csv")
+        comm_matrix = (
+            commute
+            .pivot_table(index="O_Code", columns="D_Code")#, values="Commuters", aggfunc=len)
+            .fillna(0)
+            .astype(int)
+        )
+        commute_matrix = comm_matrix.to_numpy()
+        commute_matrix[np.diag_indices_from(commute_matrix)] = 0
+
+        edges = np.zeros((len(commute_matrix), len(commute_matrix), n))
+    else:
+        edges = np.zeros((len(m_paths), len(m_paths), n))
 
     theta = 0.18 #number given by one of the optimise_for_theta runs
 
@@ -337,6 +334,11 @@ if __name__ == '__main__':
     n = 1000 #number of monte carlo repeats
     ms = [1]
 
+    #Creating m
+    stoproute = pd.read_csv('resources/stoproute_withareacodes.csv')
+    lsoa_list = pd.read_csv("resources/E47000002_KS101EW.csv")['lsoa11cd']
+    route_freqs = pd.read_csv('resources/Bus_routes_frequency.csv', usecols= ["line","average"]).astype(str)
+    m_paths = bus_adjacency(stoproute, lsoa_list, route_freqs)
     # -----------------------------------------
     # Normal paths
     # -----------------------------------------
@@ -351,7 +353,7 @@ if __name__ == '__main__':
     args_normal = []
 
     for i in range(len(ms)):
-        args_normal.append((m_paths,n, lsoa_data, paths_matrix, comp_ratio))
+        args_normal.append((m_paths, n, lsoa_data, paths_matrix, comp_ratio))
 
     with multiprocessing.Pool(processes=no_scripts) as pool:
         output = pool.starmap(monte_carlo_runs, args_normal) #monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio)
