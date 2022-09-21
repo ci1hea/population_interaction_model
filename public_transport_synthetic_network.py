@@ -131,7 +131,7 @@ def paths_shuffle(shape, income_params):
 
 
 #Bus adjacency
-def bus_adjacency(stoproute,lsoa_list,route_freqs):
+def bus_adjacency(stoproute, lsoa_list, route_freqs, lsoa_data):
     # Create matrix that combines location data and route frequencies
     combine = pd.merge(stoproute, route_freqs, on='line')
     combine = combine.drop_duplicates(['line', 'naptan_sto'])
@@ -153,10 +153,34 @@ def bus_adjacency(stoproute,lsoa_list,route_freqs):
     lsoa2lsoa = pd.DataFrame(lsoa2lsoa)
     lsoa2lsoa = lsoa2lsoa.fillna(0)
 
-    #m values created
-    m_bus = lsoa2lsoa.copy()
+    # adding index/cols codes for the OD pairs in Improved Network Scenarios
+    scr = lsoa_data['sheff_lsoa_shape']
+    lsoa2lsoa.index = scr.lsoa11cd.values
+    lsoa2lsoa.columns = scr.lsoa11cd.values
+
+# # # Comment this out if using original bus frequencies - this is using the median and increase the valso to 50%
+#     OD_lsoa = pd.read_csv('resources/Bus_improvementlsoa2lsoa.csv')
+#     for i in range (len(OD_lsoa)):
+#        x = OD_lsoa['O_lsoa'][i]
+#        y = OD_lsoa['D_lsoa'][i]
+#        lsoa2_5 = lsoa2lsoa.copy()
+#        if lsoa2_5[x][y] > lsoa2_5[lsoa2_5>0].median().median():
+#            lsoa2_5.replace([lsoa2_5[x][y]],lsoa2_5[x][y]*1.5)
+#        else:
+#            lsoa2_5[x][y] = lsoa2_5[lsoa2_5>0].median().median()
+
+    #m values created - not changed yet
+    # m_bus = lsoa2lsoa.copy()
+    # m_bus[m_bus>0]=np.log10(m_bus[m_bus>0])
+    # m_bus=1-(m_bus/np.max(np.max(m_bus)))
+
+    m_bus = np.round(lsoa2lsoa.copy(),0) # - use for existent bus network
+    # m_bus = np.round(lsoa2_5.copy(),0) # - use for improved bus network
+
     m_bus[m_bus>0]=np.log10(m_bus[m_bus>0])
     m_bus=1-(m_bus/np.max(np.max(m_bus)))
+    m_bus[m_bus==0]=np.min(np.min(m_bus[m_bus!=0]))
+
     return m_bus.values
 
 #Monte Carlo function---------------------------------------------------------
@@ -234,7 +258,8 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, msoa_on=Fa
     else:
         edges = np.zeros((len(m_paths), len(m_paths), n))
 
-    theta = 0.18 #number given by one of the optimise_for_theta runs
+    # theta = 0.21 #number given by one of the optimise_for_theta runs car-commute_matrix
+    theta = 1.96 #number given by one of the optimise_for_theta runs bus-commute_matrix
 
     for i in range(n):
 
@@ -251,8 +276,12 @@ def monte_carlo_runs(m_paths, n, lsoa_data, paths_matrix, comp_ratio, msoa_on=Fa
         attractivity1 = attractivity1.reshape((len(attractivity1),1))
         attractivity2 = attractivity2.reshape((len(attractivity2),1))
 
-        #population amplification
+        #population amplification - current
         pop = np.asarray(edu_counts).reshape((len(edu_counts), 1))
+
+        # #population amplification - predicted
+        # new_pop = pd.read_csv('resources/2(a)developments_pop_growth_data.csv', usecols= ["new population"])
+        # pop = np.asarray(new_pop).reshape((len(new_pop), 1))
 
 
         if is_shuffled is None:
@@ -338,7 +367,7 @@ if __name__ == '__main__':
     stoproute = pd.read_csv('resources/stoproute_withareacodes.csv')
     lsoa_list = pd.read_csv("resources/E47000002_KS101EW.csv")['lsoa11cd']
     route_freqs = pd.read_csv('resources/Bus_routes_frequency.csv', usecols= ["line","average"]).astype(str)
-    m_paths = bus_adjacency(stoproute, lsoa_list, route_freqs)
+    m_paths = bus_adjacency(stoproute, lsoa_list, route_freqs, lsoa_data)
     # -----------------------------------------
     # Normal paths
     # -----------------------------------------
@@ -370,7 +399,7 @@ if __name__ == '__main__':
         "edge_widths": edge_widths
         }
 
-    save_obj(normal, "normal_layout_"+str(n)+"run_bus_given_theta")
+    save_obj(normal, "normal_layout_"+str(n)+"run_bus_given_theta_test9")
 
     print(time.time()-t1)
 

@@ -68,4 +68,4 @@ def loop_theta(connectivity, pop, commute_matrix, low_bound, high_bound, step):
              theta_fin = theta[i]
 
 
-    return theta_fin, theta, prod_F, A_sim
+    return theta_fin, A_sim #, theta, prod_F
